@@ -673,6 +673,9 @@ class SpotiFLACGUI(QWidget):
         
         self.network_manager = QNetworkAccessManager()
         self.network_manager.finished.connect(self.on_cover_loaded)
+
+        self.update_network_manager = QNetworkAccessManager()
+        self.update_network_manager.finished.connect(self.on_update_check_finished)
         
         self.initUI()
         
@@ -690,21 +693,31 @@ class SpotiFLACGUI(QWidget):
         return False
 
     def check_updates(self):
+        request = QNetworkRequest(QUrl("https://raw.githubusercontent.com/afkarxyz/SpotiFLAC/refs/heads/main/version.json"))
+        request.setHeader(QNetworkRequest.KnownHeaders.UserAgentHeader, "SpotiFLAC Update Checker")
+        self.update_network_manager.get(request)
+
+    def on_update_check_finished(self, reply):
+        reply.deleteLater()
+
+        if reply.error() != QNetworkReply.NetworkError.NoError:
+            return
+
         try:
-            response = requests.get("https://raw.githubusercontent.com/afkarxyz/SpotiFLAC/refs/heads/main/version.json")
-            if response.status_code == 200:
-                data = response.json()
-                new_version = data.get("version")
-                
-                if new_version and version.parse(new_version) > version.parse(self.current_version):
-                    dialog = UpdateDialog(self.current_version, new_version, self)
-                    result = dialog.exec()
-                    
-                    if result == QDialog.DialogCode.Accepted:
-                        QDesktopServices.openUrl(QUrl("https://github.com/afkarxyz/SpotiFLAC/releases"))
-                        
-        except Exception as e:
-            pass
+            data = json.loads(bytes(reply.readAll()).decode('utf-8'))
+        except Exception:
+            return
+
+        new_version = data.get("version")
+        if not new_version:
+            return
+
+        if version.parse(new_version) > version.parse(self.current_version):
+            dialog = UpdateDialog(self.current_version, new_version, self)
+            result = dialog.exec()
+
+            if result == QDialog.DialogCode.Accepted:
+                QDesktopServices.openUrl(QUrl("https://github.com/afkarxyz/SpotiFLAC/releases"))
 
     @staticmethod
     def format_duration(ms):
